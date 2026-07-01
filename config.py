@@ -1,0 +1,58 @@
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BASE_DIR = Path(__file__).parent
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    llm_provider: str = "openrouter"
+    llm_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_api_key: str = ""
+    openai_api_key: str = ""
+
+    # extractor — per-meeting, качество важнее цены → smart
+    llm_model_cheap: str = "openai/gpt-4o-mini"
+    llm_model_smart: str = "openai/gpt-4o"
+    # цены $/1M токенов (для расчёта стоимости прогона; переопределяются в .env)
+    price_cheap_in: float = 0.15  # OpenAI GPT-4o mini input
+    price_cheap_out: float = 0.60  # OpenAI GPT-4o mini output
+    price_smart_in: float = 2.50  # OpenAI GPT-4o input
+    price_smart_out: float = 10.00  # OpenAI GPT-4o output
+
+    # транскрибация
+    whisper_model: str = "base"   # tiny | base | small | medium | large
+    whisper_language: str = "ru"
+
+    # захват аудио (Windows, VB-Cable) — имена устройств sounddevice
+    system_audio_device: str | None = None
+    mic_device: str | None = None
+
+    # human-in-the-loop
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+
+    # Plane
+    plane_base_url: str = ""
+    plane_api_token: str = ""
+    plane_workspace: str = ""
+    plane_project_id: str = ""
+
+    db_path: Path = BASE_DIR / "storage" / "meldlane.db"
+    out_dir: Path = BASE_DIR / "out"
+    team_path: Path = BASE_DIR / "team.yaml"
+    samples_dir: Path = BASE_DIR / "samples"
+    # рабочая директория для реального исполнения CLI-агентов (claude-code/codex) —
+    # намеренно не сам репозиторий Meldlane, чтобы агент не трогал наш код по умолчанию
+    agent_workspace_dir: Path = BASE_DIR / "out" / "agent_workspace"
+
+    @property
+    def llm_api_key(self) -> str:
+        if self.llm_provider == "openai":
+            return self.openai_api_key
+        return self.openrouter_api_key
+
+
+settings = Settings()

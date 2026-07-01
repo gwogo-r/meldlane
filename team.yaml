@@ -1,0 +1,37 @@
+# Состав команды Meldlane: люди и агенты — равноправные участники.
+# human: capacity_sp (ёмкость в story points на неделю)
+# agent:
+#   provider=openrouter        -> planning-only через API, цена по price_in/price_out ($/1M токенов)
+#   provider=claude-code/codex -> реальное исполнение через CLI (agents/cli_runner.py),
+#                                  списывается с подписки (Claude Pro/Max, ChatGPT Plus/Pro),
+#                                  не по price_in/price_out — там cost_usd приходит из самого CLI
+#                                  (claude-code) или считается 0 (codex, подписка не даёт $ в JSON)
+
+members:
+  - id: roman
+    name: Roman
+    aliases: [Роман, Рома]
+    kind: human
+    role: Founder / Full-stack
+    capacity_sp: 20
+
+  - id: claude-dev
+    name: Claude Dev
+    kind: agent
+    role: Coding agent (реальное исполнение через Claude Code CLI)
+    provider: claude-code
+
+  - id: codex-dev
+    name: Codex Dev
+    kind: agent
+    role: Coding agent (реальное исполнение через Codex CLI)
+    provider: codex
+
+  - id: gpt-researcher
+    name: GPT Researcher
+    kind: agent
+    role: Research agent (planning-only, через OpenRouter)
+    provider: openrouter
+    model: openai/gpt-4o
+    price_in: 2.5
+    price_out: 10.0
