@@ -45,6 +45,11 @@ async def _run_subprocess(binary: str, args: list[str], cwd: str | None):
     if sys.platform == "win32" and binary.lower().endswith((".cmd", ".bat")):
         # CreateProcess не резолвит "cmd" через PATH сам по себе — нужен полный путь к cmd.exe.
         exe = os.environ.get("COMSPEC", r"C:\Windows\System32\cmd.exe")
+        # cmd.exe рвёт командную строку на переносах строк даже внутри кавычек —
+        # многострочный prompt (заголовок\n\nописание) обрезал --json и всё после
+        # него, из-за чего codex тихо переключался на человеко-читаемый вывод
+        # вместо NDJSON. Схлопываем переносы в аргументах перед сборкой команды.
+        args = [a.replace("\r\n", " ").replace("\n", " ") if isinstance(a, str) else a for a in args]
         run_args = ["/c", binary, *args]
     else:
         exe = binary
@@ -56,6 +61,19 @@ async def _run_subprocess(binary: str, args: list[str], cwd: str | None):
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
+
+
+# CLI-агент на сложной задаче может работать долго, но не бесконечно:
+# без предела зависший процесс держит run-task вечно.
+AGENT_TIMEOUT_SECONDS = 15 * 60
+
+
+async def _communicate(proc, binary: str) -> tuple[bytes, bytes]:
+    try:
+        return await asyncio.wait_for(proc.communicate(), timeout=AGENT_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        proc.kill()
+        raise CliAgentError(f"{binary}: превышен таймаут {AGENT_TIMEOUT_SECONDS} сек, процесс убит")
 
 
 async def run_claude_code(prompt: str, *, cwd: str | None = None, task_id: str | None = None,
@@ -70,7 +88,7 @@ async def run_claude_code(prompt: str, *, cwd: str | None = None, task_id: str |
     if model:
         args += ["--model", model]
     proc = await _run_subprocess(binary, args, cwd)
-    stdout, stderr = await proc.communicate()
+    stdout, stderr = await _communicate(proc, "claude")
     if proc.returncode != 0:
         raise CliAgentError(f"claude завершился с кодом {proc.returncode}: {stderr.decode(errors='replace')[:500]}")
 
@@ -102,13 +120,17 @@ async def run_codex(prompt: str, *, cwd: str | None = None, task_id: str | None 
     (в отличие от total_cost_usd у Claude Code) — cost_usd всегда 0.0.
     """
     binary = _find_binary("codex")
-    args = ["exec", prompt, "--json"]
+    # По умолчанию codex exec работает в sandbox=read-only — не может писать файлы,
+    # даже если модель сгенерировала правильный код (проверено: ответил текстом теста,
+    # ничего не создал на диске). Раз мы всегда запускаем в изолированной копии
+    # (executor.py -> sync_workspace()), безопасно разрешить запись в ней явно.
+    args = ["exec", prompt, "--json", "--sandbox", "workspace-write"]
     if model:
         args += ["--model", model]
     if effort:
         args += ["-c", f"model_reasoning_effort={effort}"]
     proc = await _run_subprocess(binary, args, cwd)
-    stdout, stderr = await proc.communicate()
+    stdout, stderr = await _communicate(proc, "codex")
     if proc.returncode != 0:
         raise CliAgentError(f"codex завершился с кодом {proc.returncode}: {stderr.decode(errors='replace')[:500]}")
 
@@ -118,7 +140,10 @@ async def run_codex(prompt: str, *, cwd: str | None = None, task_id: str | None 
         line = line.strip()
         if not line or not line.startswith("{"):
             continue
-        event = json.loads(line)
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
         if event.get("type") == "item.completed" and event.get("item", {}).get("type") == "agent_message":
             text_parts.append(event["item"].get("text", ""))
         elif event.get("type") == "turn.completed":

@@ -4,10 +4,13 @@ aiosqlite
 pyyaml
 typer
 openai
-# аудио / транскрибация (Шаг 3)
+numpy
+# аудио / транскрибация
 sounddevice
 openai-whisper
-# tracker (Шаг 4)
+# tracker (Шаг 4, Plane на VPS)
 httpx
-# telegram, human-in-the-loop (Шаг 6)
+# telegram, human-in-the-loop
 aiogram
+# тесты
+pytest

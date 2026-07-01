@@ -26,7 +26,7 @@ class ConfirmGate:
         """
         bot = Bot(token=self.bot_token)
         dp = Dispatcher()
-        result: asyncio.Future[bool] = asyncio.get_event_loop().create_future()
+        result: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
 
         @dp.callback_query(F.data.in_({"confirm", "reject"}))
         async def on_answer(query: CallbackQuery):

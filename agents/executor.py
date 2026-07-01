@@ -12,14 +12,20 @@
   awaiting_confirm -> testing (человек проверяет и переводит в done вручную)
 """
 import json
+import shutil
 
 from openai import AsyncOpenAI
 
 from agents.cli_runner import CliAgentError, run_claude_code, run_codex
 from agents.confirm import ConfirmGate
-from config import settings
+from config import settings, BASE_DIR
 from metrics.logger import usage_from_response
 from models import Member, Task, TaskStatus, TokenUsage
+
+# Что не копируем в рабочую копию для агента: git-история, кэши, БД, сами выводы агентов.
+_WORKSPACE_IGNORE = shutil.ignore_patterns(
+    ".git", "__pycache__", "*.db", "out", ".env", "node_modules", "*.wav"
+)
 
 PLAN_SYSTEM_PROMPT = """Ты AI-агент команды. Тебе назначена задача. Опиши план действий:
 1-3 конкретных шага, что ты сделаешь. Если среди шагов есть необратимое действие
@@ -78,6 +84,20 @@ async def plan_task(task: Task, agent: Member) -> tuple[dict, TokenUsage]:
 _CLAUDE_MODEL_BY_EFFORT = {"low": "haiku", "medium": "sonnet", "high": "opus"}
 
 
+def sync_workspace() -> None:
+    """Свежая копия репозитория в out/agent_workspace/ перед каждым запуском.
+
+    Агент должен видеть реальный код, чтобы задачи вроде "напиши тесты для X"
+    были выполнимы, но не должен иметь доступа к боевому репозиторию — правит
+    только копию. Копия перезаписывается с нуля на каждый запуск (детерминизм,
+    без накопления мусора от прошлых попыток агента).
+    """
+    workspace = settings.agent_workspace_dir
+    if workspace.exists():
+        shutil.rmtree(workspace)
+    shutil.copytree(BASE_DIR, workspace, ignore=_WORKSPACE_IGNORE)
+
+
 async def _execute_via_cli(task: Task, agent: Member, *, confirm: bool) -> tuple[Task, TokenUsage]:
     task.status = TaskStatus.awaiting_confirm
     if confirm:
@@ -94,7 +114,7 @@ async def _execute_via_cli(task: Task, agent: Member, *, confirm: bool) -> tuple
     prompt = f"{task.title}\n\n{task.description}".strip()
 
     workspace = settings.agent_workspace_dir
-    workspace.mkdir(parents=True, exist_ok=True)
+    sync_workspace()
 
     try:
         if agent.provider == "claude-code":
@@ -107,6 +127,9 @@ async def _execute_via_cli(task: Task, agent: Member, *, confirm: bool) -> tuple
                 prompt, cwd=str(workspace), task_id=task.id, member_id=agent.id, effort=effort
             )
     except CliAgentError as e:
+        # причину блокировки обязаны показать: молчаливый blocked уже прятал от нас
+        # реальный баг (codex тихо терял --json и возвращал 0 токенов)
+        print(f"[{agent.name}] исполнение сорвалось: {e}")
         task.status = TaskStatus.blocked
         return task, TokenUsage(stage="agent_exec_error", model=agent.provider or "", cost_usd=0.0, task_id=task.id, member_id=agent.id)
 

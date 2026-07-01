@@ -14,9 +14,8 @@ for _stream in (sys.stdout, sys.stderr):
     except AttributeError:
         pass
 
-from agents.executor import execute_task
-from capture.audio import record
-from capture.transcriber import transcribe as whisper_transcribe
+# capture.* и agents.executor импортируются лениво внутри команд: whisper тянет
+# torch (~4 сек), и холодный старт CLI доходил до 10+ сек даже на --help
 from config import settings
 from metrics.capacity import compute_capacity
 from models import Meeting, Member, Transcript, TranscriptSegment
@@ -55,8 +54,11 @@ async def _members():
 
     for m in await storage.get_members():
         if m.kind.value == "agent":
-            price = f"${m.price_in}/{m.price_out} за 1M ток."
-            print(f"- [agent] {m.name} [{m.id}] — {m.provider}/{m.model} · {price}")
+            if m.price_in is not None:  # openrouter: цена за токен
+                detail = f"{m.provider}/{m.model} · ${m.price_in}/{m.price_out} за 1M ток."
+            else:  # cli-агент: списывается с подписки
+                detail = f"{m.provider} CLI · подписка"
+            print(f"- [agent] {m.name} [{m.id}] — {detail}")
         else:
             cap = f"{m.capacity_sp} SP/нед" if m.capacity_sp else "—"
             print(f"- [human] {m.name} [{m.id}] — {m.role or ''} · {cap}")
@@ -159,6 +161,8 @@ async def _run_task(task_id: str, no_confirm: bool):
         print(f"«{agent.name}» — человек, AgentExecutor исполняет только задачи агентов")
         return
 
+    from agents.executor import execute_task
+
     print(f"[{agent.name}] планирую «{task.title}»...")
     updated, usage = await execute_task(task, agent, confirm=not no_confirm)
     await storage.add_token_usage(usage)
@@ -181,6 +185,8 @@ async def _extract(path: Path, title: str):
 
 
 async def _capture(seconds: int, title: str):
+    from capture.audio import record
+
     out_path = settings.out_dir / "recordings" / f"{uuid.uuid4().hex[:12]}.wav"
     print(f"запись {seconds} сек... (mic: {settings.mic_device or 'default'}, "
           f"system: {settings.system_audio_device or 'не сконфигурирован'})")
@@ -189,6 +195,8 @@ async def _capture(seconds: int, title: str):
 
 
 async def _transcribe(wav_path: Path, title: str):
+    from capture.transcriber import transcribe as whisper_transcribe
+
     storage = Storage()
     await storage.init()
     members = await _load_members(storage)
