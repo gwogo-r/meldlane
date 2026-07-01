@@ -23,7 +23,8 @@ main.py / config.py / team.yaml     — CLI, настройки, состав к
 models/     — Member, Meeting, Transcript, Task, TokenUsage
 pipeline/   — extractor.py (Transcript → Task[], LLM)
 capture/    — audio.py + transcriber.py (Whisper)
-tracker/    — plane.py (Plane API, агент-как-assignee) [Шаг 4, отложен]
+tracker/    — plane.py (Plane API, агент-как-assignee) [Шаг 4, отложен — папки ещё нет]
+tests/      — pytest (test_capacity.py написан Codex-агентом через саму систему)
 agents/     — executor.py (маршрутизация по provider), confirm.py (Telegram),
               cli_runner.py (запуск claude/codex CLI подпроцессом, реальное исполнение)
 metrics/    — logger.py (токены/$ для openrouter-агентов), capacity.py
