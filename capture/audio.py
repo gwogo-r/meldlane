@@ -9,6 +9,18 @@ from scipy.signal import resample_poly
 from config import settings
 
 SAMPLE_RATE = 16_000  # целевая частота для Whisper (выход record() всегда 16kHz mono)
+STOP_FLAG_PATH = settings.out_dir / ".capture_stop"
+MAX_SECONDS_DEFAULT = 4 * 3600  # защитный потолок для открытой записи (start/stop)
+
+
+def request_stop() -> None:
+    """Ставит флаг остановки для текущей записи — читает отдельный процесс `stop`."""
+    STOP_FLAG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    STOP_FLAG_PATH.touch()
+
+
+def _clear_stop_flag() -> None:
+    STOP_FLAG_PATH.unlink(missing_ok=True)
 
 
 def _find_device(name_hint: str | None, kind: str = "input") -> int | None:
@@ -33,9 +45,10 @@ def _resample_to_target(frames: np.ndarray, native_rate: int) -> np.ndarray:
     return np.clip(resampled, -32768, 32767).astype(np.int16).reshape(-1, 1)
 
 
-def _record_stream(device: int | None, seconds: float) -> np.ndarray:
-    """Пишет seconds секунд с устройства через callback-API на его нативной частоте,
-    возвращает SAMPLE_RATE Hz mono int16.
+def _record_stream(device: int | None, max_seconds: float) -> np.ndarray:
+    """Пишет с устройства через callback-API на его нативной частоте, пока не истечёт
+    max_seconds ИЛИ не появится STOP_FLAG_PATH (файл-флаг для graceful stop).
+    Возвращает SAMPLE_RATE Hz mono int16 — то, что успело накопиться в callback'е.
 
     Блокирующий sd.rec()/stream.read() не годится: WDM-KS устройства (напр.
     "Стерео микшер" — системный звук без VB-Cable) поддерживают только
@@ -55,33 +68,43 @@ def _record_stream(device: int | None, seconds: float) -> np.ndarray:
     def callback(indata, frame_count, time_info, status):
         frames.append(indata.copy())
 
+    started = time.monotonic()
     with sd.InputStream(samplerate=native_rate, channels=channels, dtype="int16", device=device, callback=callback):
-        time.sleep(seconds)
+        while time.monotonic() - started < max_seconds:
+            if STOP_FLAG_PATH.exists():
+                break
+            time.sleep(0.5)
 
     raw = np.concatenate(frames, axis=0) if frames else np.zeros((0, channels), dtype="int16")
     return _resample_to_target(raw, native_rate)
 
 
-def record(out_path: Path, seconds: int) -> Path:
+def record(out_path: Path, max_seconds: float = MAX_SECONDS_DEFAULT) -> Path:
     """Пишет mic (+ system audio, если сконфигурирован) в один WAV, 16kHz mono.
+
+    Останавливается по истечении max_seconds ИЛИ по вызову request_stop() из
+    другого процесса (`python main.py capture-stop`) — в обоих случаях
+    сохраняет всё, что успело записаться, а не теряет запись целиком.
 
     System audio: любое устройство-loopback — Windows "Стерео микшер" (штатный,
     без установки чего-либо, если включён в настройках звука) или VB-Cable,
     если поставлен. Без него пишет только микрофон.
     """
+    _clear_stop_flag()
     mic_idx = _find_device(settings.mic_device, "input")
     sys_idx = _find_device(settings.system_audio_device, "input")
 
     if sys_idx is None:
-        mixed = _record_stream(mic_idx, seconds)
+        mixed = _record_stream(mic_idx, max_seconds)
     else:
         # два независимых потока в тредах — стартуют почти одновременно,
-        # каждый ресемплится к SAMPLE_RATE независимо перед миксом
+        # каждый ресемплится к SAMPLE_RATE независимо перед миксом,
+        # оба слушают один и тот же STOP_FLAG_PATH
         import concurrent.futures
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-            mic_future = pool.submit(_record_stream, mic_idx, seconds)
-            sys_future = pool.submit(_record_stream, sys_idx, seconds)
+            mic_future = pool.submit(_record_stream, mic_idx, max_seconds)
+            sys_future = pool.submit(_record_stream, sys_idx, max_seconds)
             mic_frames = mic_future.result()
             sys_frames = sys_future.result()
 
@@ -90,6 +113,7 @@ def record(out_path: Path, seconds: int) -> Path:
             mic_frames[:n].astype(np.int32) + sys_frames[:n].astype(np.int32), -32768, 32767
         ).astype(np.int16)
 
+    _clear_stop_flag()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(out_path), "wb") as wf:
         wf.setnchannels(1)

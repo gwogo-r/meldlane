@@ -184,14 +184,27 @@ async def _extract(path: Path, title: str):
     await _run_extraction(storage, meeting, transcript, members)
 
 
-async def _capture(seconds: int, title: str):
-    from capture.audio import record
+async def _capture(seconds: int | None, title: str):
+    from capture.audio import MAX_SECONDS_DEFAULT, record
 
     out_path = settings.out_dir / "recordings" / f"{uuid.uuid4().hex[:12]}.wav"
-    print(f"запись {seconds} сек... (mic: {settings.mic_device or 'default'}, "
-          f"system: {settings.system_audio_device or 'не сконфигурирован'})")
-    record(out_path, seconds)
+    if seconds:
+        print(f"запись {seconds} сек... (mic: {settings.mic_device or 'default'}, "
+              f"system: {settings.system_audio_device or 'не сконфигурирован'})")
+        record(out_path, seconds)
+    else:
+        print(f"запись начата (mic: {settings.mic_device or 'default'}, "
+              f"system: {settings.system_audio_device or 'не сконфигурирован'}).\n"
+              f"Останови из другого терминала: python main.py capture-stop")
+        record(out_path, MAX_SECONDS_DEFAULT)
     print(f"записано: {out_path}")
+
+
+async def _capture_stop():
+    from capture.audio import request_stop
+
+    request_stop()
+    print("сигнал остановки отправлен — идущая запись сохранится и завершится в течение ~1 сек")
 
 
 async def _transcribe(wav_path: Path, title: str):
@@ -239,11 +252,17 @@ def run_task_cmd(
 
 @app.command("capture")
 def capture_cmd(
-    seconds: int = typer.Option(30, help="длительность записи в секундах"),
+    seconds: int | None = typer.Option(None, help="длительность записи в секундах; без флага — пишет, пока не остановишь через capture-stop"),
     title: str = typer.Option("Untitled meeting", help="название митинга"),
 ):
-    """Записать mic (+ system audio, если сконфигурирован VB-Cable) в WAV."""
+    """Записать mic (+ system audio, если сконфигурирован) в WAV."""
     asyncio.run(_capture(seconds, title))
+
+
+@app.command("capture-stop")
+def capture_stop_cmd():
+    """Остановить идущую запись (запущенную без --seconds) из другого терминала."""
+    asyncio.run(_capture_stop())
 
 
 @app.command("transcribe")
