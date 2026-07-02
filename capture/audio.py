@@ -1,12 +1,14 @@
+import time
 import wave
 from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
+from scipy.signal import resample_poly
 
 from config import settings
 
-SAMPLE_RATE = 16_000  # Whisper ожидает 16kHz mono
+SAMPLE_RATE = 16_000  # целевая частота для Whisper (выход record() всегда 16kHz mono)
 
 
 def _find_device(name_hint: str | None, kind: str = "input") -> int | None:
@@ -21,47 +23,71 @@ def _find_device(name_hint: str | None, kind: str = "input") -> int | None:
     raise ValueError(f"аудио-устройство не найдено: {name_hint!r}")
 
 
-def _record_stream(device: int | None, frames_total: int) -> np.ndarray:
-    """Читает frames_total сэмплов из устройства через собственный InputStream.
+def _resample_to_target(frames: np.ndarray, native_rate: int) -> np.ndarray:
+    """native_rate Hz, любое число каналов -> SAMPLE_RATE Hz mono int16."""
+    if frames.shape[1] > 1:
+        frames = frames.mean(axis=1, keepdims=True).astype(np.int16)
+    if native_rate == SAMPLE_RATE:
+        return frames
+    resampled = resample_poly(frames[:, 0].astype(np.float64), SAMPLE_RATE, native_rate)
+    return np.clip(resampled, -32768, 32767).astype(np.int16).reshape(-1, 1)
 
-    Convenience-функция sd.rec() не годится для двух параллельных записей —
-    rec/play делят один глобальный контекст, второй вызов глушит первый.
+
+def _record_stream(device: int | None, seconds: float) -> np.ndarray:
+    """Пишет seconds секунд с устройства через callback-API на его нативной частоте,
+    возвращает SAMPLE_RATE Hz mono int16.
+
+    Блокирующий sd.rec()/stream.read() не годится: WDM-KS устройства (напр.
+    "Стерео микшер" — системный звук без VB-Cable) поддерживают только
+    callback-режим (PaErrorCode -9999 на blocking read) и обычно работают
+    на 48000 Hz, а не 16000 — открытие потока сразу на 16000 падает с
+    "Invalid device". Пишем на нативной частоте устройства, ресемплим потом.
     """
-    buf = np.empty((frames_total, 1), dtype="int16")
-    filled = 0
-    with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16", device=device) as stream:
-        while filled < frames_total:
-            chunk, _ = stream.read(min(4096, frames_total - filled))
-            n = len(chunk)
-            buf[filled:filled + n] = chunk
-            filled += n
-    return buf
+    # sd.query_devices(None) возвращает список ВСЕХ устройств, а не дефолтное —
+    # нужно сперва разрешить None в конкретный индекс через sd.default.device.
+    resolved = device if device is not None else sd.default.device[0]
+    info = sd.query_devices(resolved)
+    native_rate = int(info["default_samplerate"])
+    channels = min(info["max_input_channels"], 2) or 1
+
+    frames: list[np.ndarray] = []
+
+    def callback(indata, frame_count, time_info, status):
+        frames.append(indata.copy())
+
+    with sd.InputStream(samplerate=native_rate, channels=channels, dtype="int16", device=device, callback=callback):
+        time.sleep(seconds)
+
+    raw = np.concatenate(frames, axis=0) if frames else np.zeros((0, channels), dtype="int16")
+    return _resample_to_target(raw, native_rate)
 
 
 def record(out_path: Path, seconds: int) -> Path:
-    """Пишет mic (+ system audio через VB-Cable, если сконфигурирован) в один WAV.
+    """Пишет mic (+ system audio, если сконфигурирован) в один WAV, 16kHz mono.
 
-    Без VB-Cable пишет только микрофон — этого достаточно, чтобы проверить
-    конвейер целиком; system audio подключается, когда появится кабель.
+    System audio: любое устройство-loopback — Windows "Стерео микшер" (штатный,
+    без установки чего-либо, если включён в настройках звука) или VB-Cable,
+    если поставлен. Без него пишет только микрофон.
     """
     mic_idx = _find_device(settings.mic_device, "input")
     sys_idx = _find_device(settings.system_audio_device, "input")
-    frames_total = int(seconds * SAMPLE_RATE)
 
     if sys_idx is None:
-        mixed = _record_stream(mic_idx, frames_total)
+        mixed = _record_stream(mic_idx, seconds)
     else:
         # два независимых потока в тредах — стартуют почти одновременно,
-        # микшируются сложением с защитой от клиппинга
+        # каждый ресемплится к SAMPLE_RATE независимо перед миксом
         import concurrent.futures
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-            mic_future = pool.submit(_record_stream, mic_idx, frames_total)
-            sys_future = pool.submit(_record_stream, sys_idx, frames_total)
+            mic_future = pool.submit(_record_stream, mic_idx, seconds)
+            sys_future = pool.submit(_record_stream, sys_idx, seconds)
             mic_frames = mic_future.result()
             sys_frames = sys_future.result()
+
+        n = min(len(mic_frames), len(sys_frames))
         mixed = np.clip(
-            mic_frames.astype(np.int32) + sys_frames.astype(np.int32), -32768, 32767
+            mic_frames[:n].astype(np.int32) + sys_frames[:n].astype(np.int32), -32768, 32767
         ).astype(np.int16)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
