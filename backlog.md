@@ -31,3 +31,4 @@
 | MEL-024 | CLI-старт 10.7с → 2.2с: ленивые импорты whisper/executor | P2 | DONE | backend | Аудит 2026-07-02: main.py тянул torch на верхнем уровне даже для --help |
 | MEL-025 | audio.py: два параллельных sd.rec() не работают — переписано на InputStream | P2 | DONE | backend | Аудит: convenience-функции sounddevice делят один глобальный поток, второй rec глушил первый. Микс mic+system теперь два InputStream в тредах. Mic-путь проверен записью; system-путь ждёт VB-Cable |
 | MEL-026 | Таймаут CLI-агентов (15 мин) + не глотать CliAgentError | P2 | DONE | backend | Аудит: зависший claude/codex держал run-task вечно; ошибка исполнения молча превращалась в blocked без причины |
+| MEL-027 | Whisper → faster-whisper (CTranslate2, без torch) | P2 | DONE | backend | В разы быстрее на CPU (3.3с вместо ~10+с на том же клипе), не тянет torch (~450МБ). torch/openai-whisper удалены из окружения. Проверено вживую на реальной речи |

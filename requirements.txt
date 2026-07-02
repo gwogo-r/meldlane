@@ -5,9 +5,10 @@ pyyaml
 typer
 openai
 numpy
-# аудио / транскрибация
+# аудио / транскрибация (faster-whisper: CTranslate2-бэкенд, в разы быстрее
+# оригинального openai-whisper на CPU, не тянет torch как зависимость)
 sounddevice
-openai-whisper
+faster-whisper
 # tracker (Шаг 4, Plane на VPS)
 httpx
 # telegram, human-in-the-loop
