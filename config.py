@@ -22,13 +22,9 @@ class Settings(BaseSettings):
     price_smart_in: float = 2.50  # OpenAI GPT-4o input
     price_smart_out: float = 10.00  # OpenAI GPT-4o output
 
-    # транскрибация
-    whisper_model: str = "base"   # tiny | base | small | medium | large
-    whisper_language: str = "ru"
-
-    # захват аудио (Windows, VB-Cable) — имена устройств sounddevice
-    system_audio_device: str | None = None
-    mic_device: str | None = None
+    # транскрибация и захват звука — делегированы пакету meldlane-transcribe
+    # (MTRANSCRIBE_MODEL, MTRANSCRIBE_LANGUAGE, MTRANSCRIBE_MIC_DEVICE,
+    # MTRANSCRIBE_SYSTEM_DEVICE в .env), здесь не дублируются
 
     # human-in-the-loop
     telegram_bot_token: str = ""

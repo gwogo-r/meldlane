@@ -184,39 +184,72 @@ async def _extract(path: Path, title: str):
     await _run_extraction(storage, meeting, transcript, members)
 
 
-async def _capture(seconds: int | None, title: str):
-    from capture.audio import MAX_SECONDS_DEFAULT, record
+def _recordings_dir() -> Path:
+    return settings.out_dir / "recordings"
 
-    out_path = settings.out_dir / "recordings" / f"{uuid.uuid4().hex[:12]}.wav"
+
+async def _capture(seconds: int | None, title: str):
+    from meldlane_transcribe.capture import MAX_SECONDS_DEFAULT, record_tracks, system_track_strategy
+    from meldlane_transcribe.sessions import create_session_dir
+
+    strategy = system_track_strategy()
+    sys_label = {"wasapi-loopback": "WASAPI loopback", "named-device": "именованное устройство"}.get(
+        strategy[0] if strategy else "", "нет — только микрофон"
+    )
+    session = create_session_dir(_recordings_dir())
     if seconds:
-        print(f"запись {seconds} сек... (mic: {settings.mic_device or 'default'}, "
-              f"system: {settings.system_audio_device or 'не сконфигурирован'})")
-        record(out_path, seconds)
+        print(f"запись {seconds} сек... (system: {sys_label})")
     else:
-        print(f"запись начата (mic: {settings.mic_device or 'default'}, "
-              f"system: {settings.system_audio_device or 'не сконфигурирован'}).\n"
-              f"Останови из другого терминала: python main.py capture-stop")
-        record(out_path, MAX_SECONDS_DEFAULT)
-    print(f"записано: {out_path}")
+        print(f"запись начата (system: {sys_label}).\nОстанови из другого терминала: python main.py capture-stop")
+
+    tracks = record_tracks(session, seconds or MAX_SECONDS_DEFAULT)
+    print(f"записаны дорожки: {', '.join(tracks)} -> {session}")
 
 
 async def _capture_stop():
-    from capture.audio import request_stop
+    from meldlane_transcribe.capture import request_stop
 
-    request_stop()
+    request_stop(_recordings_dir())
     print("сигнал остановки отправлен — идущая запись сохранится и завершится в течение ~1 сек")
 
 
-async def _transcribe(wav_path: Path, title: str):
-    from capture.transcriber import transcribe as whisper_transcribe
+# meldlane_transcribe.capture.record_tracks всегда называет дорожки так —
+# см. capture.py в meldlane-transcribe (tracks["me"] = mic.wav, tracks["others"] = system.wav)
+_SPEAKER_BY_FILENAME = {"mic.wav": "me", "system.wav": "others"}
+
+
+async def _transcribe(source: Path, title: str):
+    """source: WAV-файл ИЛИ папка сессии от `capture` (mic.wav [+ system.wav])."""
+    from meldlane_transcribe import config as mt_config
+    from meldlane_transcribe.models import merge_tracks as mt_merge_tracks
+    from meldlane_transcribe.transcriber import transcribe_file
 
     storage = Storage()
     await storage.init()
     members = await _load_members(storage)
 
     meeting = Meeting(id=uuid.uuid4().hex[:12], title=title, started_at=datetime.utcnow(), source="audio")
-    print(f"транскрибирую {wav_path} (модель whisper: {settings.whisper_model})...")
-    transcript = whisper_transcribe(wav_path, meeting.id)
+    wavs = (
+        [(_SPEAKER_BY_FILENAME.get(p.name), p) for p in sorted(source.glob("*.wav"))]
+        if source.is_dir()
+        else [(None, source)]
+    )
+
+    print(f"транскрибирую {source} (модель: {mt_config.whisper_model()})...")
+    tracks_segments, lang = [], ""
+    for speaker, wav in wavs:
+        segments, track_lang, _ = transcribe_file(wav, speaker=speaker)
+        tracks_segments.append(segments)
+        lang = lang or track_lang
+
+    merged = mt_merge_tracks(*tracks_segments)
+    transcript = Transcript(
+        meeting_id=meeting.id,
+        lang=lang,
+        segments=[
+            TranscriptSegment(text=s.text, speaker=s.speaker, start=s.start, end=s.end) for s in merged
+        ],
+    )
     await _run_extraction(storage, meeting, transcript, members)
 
 
@@ -255,7 +288,7 @@ def capture_cmd(
     seconds: int | None = typer.Option(None, help="длительность записи в секундах; без флага — пишет, пока не остановишь через capture-stop"),
     title: str = typer.Option("Untitled meeting", help="название митинга"),
 ):
-    """Записать mic (+ system audio, если сконфигурирован) в WAV."""
+    """Записать mic (+ system audio, если найден loopback) раздельными дорожками через meldlane-transcribe."""
     asyncio.run(_capture(seconds, title))
 
 
@@ -267,11 +300,11 @@ def capture_stop_cmd():
 
 @app.command("transcribe")
 def transcribe_cmd(
-    wav: Path = typer.Argument(..., help="путь к WAV-записи"),
+    source: Path = typer.Argument(..., help="WAV-файл или папка сессии от `capture` (mic.wav [+ system.wav])"),
     title: str = typer.Option("Untitled meeting", help="название митинга"),
 ):
-    """Транскрибировать WAV через Whisper и сразу извлечь задачи."""
-    asyncio.run(_transcribe(wav, title))
+    """Транскрибировать запись через meldlane-transcribe и сразу извлечь задачи."""
+    asyncio.run(_transcribe(source, title))
 
 
 @app.command("capacity")

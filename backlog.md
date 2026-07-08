@@ -50,7 +50,7 @@
 | MEL-034 | Структурированное хранение сессий + очистка временных файлов | P2 | DONE | backend | outputs/YYYY-MM-DD_HH-MM/transcript.json (+ WAV по флагу --keep-audio, иначе удаляются) |
 | MEL-035 | Команда doctor: диагностика аудиоустройств и стратегии захвата | P2 | DONE | backend | Проверено вживую: нашёл mic по умолчанию и Stereo Mix автодетектом, печатает per-OS подсказки, если loopback нет |
 | MEL-036 | Публикация на GitHub: README (Win/mac), pyproject, лицензия, uvx-запуск | P1 | TODO | infra | Критерий готовности спринта: человек со стороны ставит и получает транскрипт из mp3 без нашей помощи |
-| MEL-037 | Meldlane-оркестратор переходит на meldlane-transcribe как зависимость | P2 | TODO | backend | Убрать capture/ из этого репозитория, подключить пакет; capture/capture-stop/transcribe работают как раньше |
+| MEL-037 | Meldlane-оркестратор переходит на meldlane-transcribe как зависимость | P2 | DONE | backend | capture/ удалён, requirements.txt → git+https на GitHub-репо. main.py: capture/capture-stop/transcribe используют meldlane_transcribe.capture/.transcriber, конвертация Segment→TranscriptSegment. Настройки WHISPER_*/*_DEVICE → MTRANSCRIBE_* в .env. Проверено вживую: capture (WASAPI) → transcribe → корректные speaker-метки me/others, дошло до LLM-стадии (упало на отсутствующем API-ключе, не связано с рефакторингом) |
 
 ### Соглашения спринта 1 (для любой сессии/модели, продолжающей работу)
 

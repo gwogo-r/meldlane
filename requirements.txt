@@ -5,11 +5,8 @@ pyyaml
 typer
 openai
 numpy
-# аудио / транскрибация (faster-whisper: CTranslate2-бэкенд, в разы быстрее
-# оригинального openai-whisper на CPU, не тянет torch как зависимость)
-sounddevice
-scipy
-faster-whisper
+# аудио / транскрибация — вынесены в отдельный сервис (MEL-037)
+meldlane-transcribe @ git+https://github.com/gwogo-r/meldlane-transcribe.git
 # tracker (Шаг 4, Plane на VPS)
 httpx
 # telegram, human-in-the-loop
