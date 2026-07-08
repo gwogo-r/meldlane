@@ -34,3 +34,42 @@
 | MEL-027 | Whisper → faster-whisper (CTranslate2, без torch) | P2 | DONE | backend | В разы быстрее на CPU (3.3с вместо ~10+с на том же клипе), не тянет torch (~450МБ). torch/openai-whisper удалены из окружения. Проверено вживую на реальной речи |
 | MEL-028 | System audio без VB-Cable через штатный «Стерео микшер» | P1 | DONE | backend | Обнаружено вживую: Stereo Mix ловит системный звук без установки чего-либо. Но требовал переписать audio.py — WDM-KS не поддерживает blocking read (нужен callback) и работает на нативной частоте устройства (48kHz), не 16kHz. Добавлен resample_poly (scipy) до 16kHz перед миксом с mic. Проверено: mic+system вместе, 16kHz WAV, Whisper распознал |
 | MEL-029 | Graceful stop для записи (capture-stop) — не терять запись при ранней остановке | P1 | DONE | backend | Раньше WAV писался только по истечении фиксированного --seconds — ранняя остановка = потеря всего. Добавлен файл-флаг out/.capture_stop: capture без --seconds пишет открыто (до 4ч), capture-stop из другого терминала останавливает и сохраняет накопленное. Проверено вживую: старт → речь → capture-stop → WAV сохранён и распознан |
+| MEL-030 | Кроссплатформенный захват системного звука (не только Stereo Mix) | P1 | DONE | backend | Windows: WASAPI loopback через pyaudiowpatch (meldlane_transcribe/wasapi.py) — записывает default output loopback, работает с любым устройством вывода без Stereo Mix/VB-Cable. Проверено вживую дважды: реальный сигнал захвачен и корректно разделён от mic-дорожки. capture.py: system_track_strategy() — каскад WASAPI → именованный автодетект (Stereo Mix/BlackHole) → mic-only. macOS BlackHole-подсказка в doctor есть, сам BlackHole не тестировался (нет Mac) |
+| MEL-031 | Файловый вход: mp3/m4a/ogg/wav + видео (mp4/mkv/webm...) → транскрипт | P1 | TODO | backend | Путь нулевого сопротивления — без аудиодрайверов вообще: Zoom/Meet пишут звонки сами, человек кидает файл. faster-whisper декодирует аудиоформаты через PyAV без внешнего ffmpeg; видеоконтейнеры — опционально через ffmpeg. Форматы взять из MOM/MeetingScribe |
+
+## Спринт 1 (Фаза 2) — вынос meldlane-transcribe на GitHub
+
+> Цель: отдельный репозиторий, который запускается у кого угодно (Windows/macOS) и превращает файл или живой звук в структурированный JSON-транскрипт с таймлайном и спикерами. См. PLAN.md, Фаза 2.
+
+| ID | Title | Priority | Status | Area | Notes |
+|----|-------|----------|--------|------|-------|
+| MEL-032 | Каркас meldlane-transcribe: pip-пакет + CLI + JSON-схема Transcript | P1 | DONE | infra | C:\Projects\meldlane-transcribe, первый коммит. pip install -e работает, `mtranscribe` глобально: file/record/stop/doctor. Тесты 3 passed. Схема Transcript по контракту |
+| MEL-030 | Кроссплатформенный захват системного звука | P1 | DONE | backend | pyaudiowpatch (Windows, extra в pyproject через sys_platform=='win32'). system_track_strategy() каскад: WASAPI → именованный автодетект → mic-only. Проверено вживую дважды, реальный сигнал |
+| MEL-031 | Файловый вход: mp3/wav/m4a/ogg/aac + видео (mp4/mkv/webm/mov/avi) | P1 | DONE | backend | `mtranscribe file` — проверено на реальном 4-мин m4a из MOM: 89 сегментов, корректный русский, таймлайн. Видеоконтейнеры через PyAV объявлены, вживую не проверены |
+| MEL-033 | Спикеры: канальная диаризация mic/system из коробки, pyannote — extra | P1 | DONE | ai | Проверено вживую дважды через полный CLI (`mtranscribe record`): mic.wav и system.wav реально разделены и корректно помечены (me/others) — когда сигнал есть в одной дорожке, другая остаётся чистой. merge_tracks сортирует по таймлайну (unit-тест). Whisper иногда хаотично галлюцинирует на нессмысленном звуке (короткий сигнал/TTS не успел) — известное ограничение модели на неречевом контенте, не баг пайплайна. pyannote extra — не начат, P3 на будущее |
+| MEL-034 | Структурированное хранение сессий + очистка временных файлов | P2 | DONE | backend | outputs/YYYY-MM-DD_HH-MM/transcript.json (+ WAV по флагу --keep-audio, иначе удаляются) |
+| MEL-035 | Команда doctor: диагностика аудиоустройств и стратегии захвата | P2 | DONE | backend | Проверено вживую: нашёл mic по умолчанию и Stereo Mix автодетектом, печатает per-OS подсказки, если loopback нет |
+| MEL-036 | Публикация на GitHub: README (Win/mac), pyproject, лицензия, uvx-запуск | P1 | TODO | infra | Критерий готовности спринта: человек со стороны ставит и получает транскрипт из mp3 без нашей помощи |
+| MEL-037 | Meldlane-оркестратор переходит на meldlane-transcribe как зависимость | P2 | TODO | backend | Убрать capture/ из этого репозитория, подключить пакет; capture/capture-stop/transcribe работают как раньше |
+
+### Соглашения спринта 1 (для любой сессии/модели, продолжающей работу)
+
+- **Репозиторий:** `C:\Projects\meldlane-transcribe` (новый, git init, authorship Roman Fakhrutdinov / warmevents.ai.tools@gmail.com). GitHub remote добавим, когда Роман создаст репо.
+- **Пакет:** PyPI-имя `meldlane-transcribe`, python-модуль `meldlane_transcribe`, CLI-команда `mtranscribe`. Python 3.11+.
+- **Зависимости ядра (не раздувать):** faster-whisper, sounddevice, scipy, numpy, typer, pydantic. Extras: `[diarize]` → pyannote; `[loopback-win]` → pyaudiowpatch (если понадобится отдельно).
+- **JSON-схема Transcript (контракт, не ломать):**
+```json
+{
+  "meeting_id": "a1b2c3",
+  "lang": "ru",
+  "duration_sec": 3612.4,
+  "source": {"type": "live | file", "path": "audio.m4a"},
+  "created_at": "2026-07-02T18:00:00Z",
+  "segments": [
+    {"start": 0.0, "end": 4.2, "speaker": "me", "text": "..."}
+  ]
+}
+```
+- **Значения `speaker`:** канальная диаризация (live-запись) → `me` (mic) / `others` (system audio); pyannote (файлы, extra) → `spk_0`, `spk_1`, ...; неизвестно → `null`.
+- **Из текущего Meldlane переносится с сохранением выстраданных фиксов** (`capture/audio.py`, `capture/transcriber.py`): callback-API вместо blocking read (WDM-KS падает с PaErrorCode -9999), запись на нативной частоте устройства + resample_poly до 16kHz, разрешение device=None через sd.default.device (query_devices(None) возвращает весь список), graceful stop через файл-флаг, faster-whisper (не openai-whisper — не тянуть torch).
+- **Live-запись для канальной диаризации пишет дорожки раздельно** (не миксует, как сейчас в Meldlane) — микс только как опция для совместимости.
