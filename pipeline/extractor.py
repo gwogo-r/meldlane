@@ -1,10 +1,9 @@
 import json
 import uuid
 
-from openai import AsyncOpenAI
+from llm_gateway import chat_completion, strip_code_fence
 
 from config import settings
-from metrics.logger import usage_from_response
 from models import Task, TaskSource, TokenUsage, Transcript
 
 SYSTEM_PROMPT = """Ты ассистент, который превращает транскрипт рабочего митинга в список задач.
@@ -21,39 +20,19 @@ SYSTEM_PROMPT = """Ты ассистент, который превращает 
 Не выдумывай задачи и назначения, которых не было в обсуждении."""
 
 
-def _client() -> AsyncOpenAI:
-    return AsyncOpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url)
-
-
-def _strip_fence(raw: str) -> str:
-    return (
-        raw.strip()
-        .removeprefix("```json")
-        .removeprefix("```")
-        .removesuffix("```")
-        .strip()
-    )
-
-
 async def extract_tasks(transcript: Transcript) -> tuple[list[Task], TokenUsage]:
-    client = _client()
-    response = await client.chat.completions.create(
+    text, usage = await chat_completion(
+        system=SYSTEM_PROMPT,
+        user=transcript.full_text[:16000],
         model=settings.llm_model_smart,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": transcript.full_text[:16000]},
-        ],
-        temperature=0,
-    )
-    usage = usage_from_response(
-        response,
-        stage="extractor",
-        model=settings.llm_model_smart,
+        api_key=settings.llm_api_key,
+        base_url=settings.llm_base_url,
         price_in=settings.price_smart_in or 0.0,
         price_out=settings.price_smart_out or 0.0,
+        stage="extractor",
     )
 
-    raw = _strip_fence(response.choices[0].message.content or "[]")
+    raw = strip_code_fence(text or "[]")
     try:
         items = json.loads(raw)
     except json.JSONDecodeError:

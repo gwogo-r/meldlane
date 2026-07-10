@@ -1,3 +1,4 @@
+import tempfile
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -40,9 +41,13 @@ class Settings(BaseSettings):
     out_dir: Path = BASE_DIR / "out"
     team_path: Path = BASE_DIR / "team.yaml"
     samples_dir: Path = BASE_DIR / "samples"
-    # рабочая директория для реального исполнения CLI-агентов (claude-code/codex) —
-    # намеренно не сам репозиторий Meldlane, чтобы агент не трогал наш код по умолчанию
-    agent_workspace_dir: Path = BASE_DIR / "out" / "agent_workspace"
+    # Рабочая директория для реального исполнения CLI-агентов (claude-code/codex).
+    # НАМЕРЕННО вне дерева этого репозитория (не BASE_DIR/out/...): git ищет .git
+    # вверх по родительским папкам, если его нет в cwd — вложенная копия внутри
+    # репозитория не была настоящей изоляцией, git-команды агента находили боевой
+    # .git и коммитили туда (инцидент 2026-07-09, см. backlog MEL-042). Системный
+    # temp-каталог гарантированно не имеет .git ни в себе, ни выше по дереву.
+    agent_workspace_dir: Path = Path(tempfile.gettempdir()) / "meldlane_agent_workspace"
 
     @property
     def llm_api_key(self) -> str:

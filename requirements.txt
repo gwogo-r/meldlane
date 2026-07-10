@@ -3,8 +3,9 @@ pydantic-settings
 aiosqlite
 pyyaml
 typer
-openai
 numpy
+# LLM-вызовы (API + CLI-агенты) — вынесены в отдельную библиотеку (MEL-041)
+llm-gateway @ git+https://github.com/gwogo-r/llm-gateway.git
 # аудио / транскрибация — вынесены в отдельный сервис (MEL-037)
 meldlane-transcribe @ git+https://github.com/gwogo-r/meldlane-transcribe.git
 # tracker (Шаг 4, Plane на VPS)

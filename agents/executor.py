@@ -4,7 +4,7 @@
   - provider="openrouter" — planning-only через Chat Completions API (без
     реального доступа к файлам/shell), платится по цене модели за токен.
   - provider="claude-code" / "codex" — реальное исполнение через CLI-агента
-    (agents/cli_runner.py), списывается с подписки (Claude Pro/Max, ChatGPT
+    (llm_gateway), списывается с подписки (Claude Pro/Max, ChatGPT
     Plus/Pro), не по цене за токен.
 
 Цикл статусов одинаковый для обоих режимов:
@@ -14,12 +14,10 @@
 import json
 import shutil
 
-from openai import AsyncOpenAI
+from llm_gateway import CliAgentError, chat_completion, run_claude_code, run_codex, strip_code_fence
 
-from agents.cli_runner import CliAgentError, run_claude_code, run_codex
 from agents.confirm import ConfirmGate
 from config import settings, BASE_DIR
-from metrics.logger import usage_from_response
 from models import Member, Task, TaskStatus, TokenUsage
 
 # Что не копируем в рабочую копию для агента: git-история, кэши, БД, сами выводы агентов.
@@ -36,10 +34,6 @@ PLAN_SYSTEM_PROMPT = """Ты AI-агент команды. Тебе назнач
 CLI_RUNNERS = {"claude-code": run_claude_code, "codex": run_codex}
 
 
-def _client() -> AsyncOpenAI:
-    return AsyncOpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url)
-
-
 def select_effort(story_points: float | None) -> str:
     """Грубая сложность задачи -> уровень эффорта/модели. SP из TaskExtractor."""
     if not story_points or story_points <= 2:
@@ -50,29 +44,22 @@ def select_effort(story_points: float | None) -> str:
 
 
 async def plan_task(task: Task, agent: Member) -> tuple[dict, TokenUsage]:
-    client = _client()
-    response = await client.chat.completions.create(
-        model=agent.model or settings.llm_model_smart,
-        messages=[
-            {"role": "system", "content": PLAN_SYSTEM_PROMPT},
-            {"role": "user", "content": f"{task.title}\n\n{task.description}"},
-        ],
-        temperature=0,
-    )
     # Если агент не имеет цен, используем цены модели из settings
     price_in = agent.price_in or settings.price_smart_in
     price_out = agent.price_out or settings.price_smart_out
-    usage = usage_from_response(
-        response,
-        stage="agent_plan",
+    text, usage = await chat_completion(
+        system=PLAN_SYSTEM_PROMPT,
+        user=f"{task.title}\n\n{task.description}",
         model=agent.model or settings.llm_model_smart,
+        api_key=settings.llm_api_key,
+        base_url=settings.llm_base_url,
         price_in=price_in,
         price_out=price_out,
+        stage="agent_plan",
         task_id=task.id,
         member_id=agent.id,
     )
-    raw = (response.choices[0].message.content or "{}").strip()
-    raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    raw = strip_code_fence(text or "{}")
     try:
         plan = json.loads(raw)
     except json.JSONDecodeError:
@@ -85,12 +72,20 @@ _CLAUDE_MODEL_BY_EFFORT = {"low": "haiku", "medium": "sonnet", "high": "opus"}
 
 
 def sync_workspace() -> None:
-    """Свежая копия репозитория в out/agent_workspace/ перед каждым запуском.
+    """Свежая копия репозитория в системном temp (settings.agent_workspace_dir)
+    перед каждым запуском.
 
     Агент должен видеть реальный код, чтобы задачи вроде "напиши тесты для X"
     были выполнимы, но не должен иметь доступа к боевому репозиторию — правит
     только копию. Копия перезаписывается с нуля на каждый запуск (детерминизм,
     без накопления мусора от прошлых попыток агента).
+
+    Копия ОБЯЗАНА жить вне дерева этого git-репозитория (см. config.py) — git
+    ищет .git вверх по родительским папкам, если не находит в cwd; вложенная
+    копия внутри репозитория (даже без своего .git) не защищает от того, что
+    git-команды агента найдут и закоммитят в боевой .git (инцидент 2026-07-09,
+    backlog MEL-042). Проверить изоляцию: `git rev-parse --show-toplevel` из
+    workspace должен вернуть ошибку "not a git repository".
     """
     workspace = settings.agent_workspace_dir
     if workspace.exists():
