@@ -142,6 +142,29 @@ async def _tasks():
         print(f"{t.id}  [{t.status.value:<16}] {t.title}  (-> {who})")
 
 
+async def _sync_plane():
+    from tracker.plane import PlaneConnector
+
+    storage = Storage()
+    await storage.init()
+    members = await _load_members(storage)
+    by_id = {m.id: m for m in members}
+
+    tasks = await storage.get_tasks()
+    if not tasks:
+        print("нет задач: сначала прогони extract/transcribe")
+        return
+
+    connector = PlaneConnector()
+    for t in tasks:
+        assignee = by_id.get(t.assignee_id) if t.assignee_id else None
+        plane_id = await connector.push(t, assignee)
+        t.plane_id = plane_id
+        await storage.add_task(t)
+        who = assignee.name if assignee else (t.assignee_hint or "—")
+        print(f"{t.id}  ->  Plane #{plane_id[:8]}  «{t.title}»  (-> {who})")
+
+
 async def _run_task(task_id: str, no_confirm: bool):
     storage = Storage()
     await storage.init()
@@ -272,6 +295,12 @@ def extract_cmd(
 def tasks_cmd():
     """Показать все задачи с id, статусом и ассайни."""
     asyncio.run(_tasks())
+
+
+@app.command("sync-plane")
+def sync_plane_cmd():
+    """Синхронизировать локальные задачи в Plane (создать/обновить issue)."""
+    asyncio.run(_sync_plane())
 
 
 @app.command("run-task")
