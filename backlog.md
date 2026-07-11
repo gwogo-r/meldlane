@@ -6,10 +6,11 @@
 |----|-------|----------|--------|------|-------|
 | MEL-001 | Project initialization | P1 | DONE | infra | CLAUDE.md, comments-style.md, MEMORY.md, backlog.md; git init |
 | MEL-000 | ARCHITECTURE.md + PLAN.md + каркас (config/models/storage/CLI) | P1 | DONE | backend | `members` работает, БД создаётся, стиль от CompanyScout |
-| MEL-002 | Поднять Plane self-hosted на VPS (Docker Compose) | P1 | DUPLICATE | infra | Дубль MEL-005, туда перенесены детали и статус |
+| MEL-002 | Поднять Plane self-hosted на VPS (Docker Compose) | P1 | DUPLICATE | infra | Дубль MEL-005/MEL-005b, туда перенесены детали и статус |
 | MEL-003 | AudioCapture: mic + system audio → Whisper транскрипт | P2 | DONE | backend | mic-запись + Whisper проверены. System audio через VB-Cable — код готов, кабель не установлен на машине |
 | MEL-004 | TaskExtractor: LLM транскрипт → структурированные задачи → Plane API | P2 | IN PROGRESS | ai | Проверен end-to-end: 4 задачи из standup, SP + assignee, стоимость $0.0056. Осталось: синк в Plane (Шаг 4), точный резолв ассайни (cyrillic/latin) |
-| MEL-005 | Plane self-hosted на VPS + агент как assignee | P1 | TODO | infra | Отложено 2026-07-01 — деплой на внешний VPS, не локально (тяжёлый 13-сервисный стек). До этого задачи в SQLite (уже работают: extract/tasks/run-task/capacity) |
+| MEL-005 | Plane self-hosted + синк задач | P1 | DONE | infra | Не VPS — переиспользован уже поднятый локальный Plane из C:\Projects\FeedbackOps (docker-compose на предсобранных образах, порт 8090, НЕ source build, которого мы боялись). Создан проект "Meldlane" (identifier MEL) в том же workspace через API. tracker/plane.py + `sync-plane` CLI-команда. Проверено вживую: все 13 задач созданы как issues, идемпотентность подтверждена (13 до/после повторного sync). Честная граница: "агент как assignee" НЕ решена — Plane ждёт реальный user-аккаунт, имя исполнителя/SP кладём в описание текстом, не в нативное поле assignee. VPS для продакшена — отдельная задача на будущее (MEL-005b) |
+| MEL-005b | Plane: перенести с localhost на VPS для продакшена | P2 | TODO | infra | Текущий инстанс — локальный (docker-compose, машина Романа), делится с FeedbackOps. Для реальной команды/доступа со стороны нужен внешний сервер |
 | MEL-006 | Логирование токенов/стоимости по задачам | P2 | DONE | backend | metrics/logger.py + capacity.py готовы; capacity CLI проверен |
 | MEL-012 | Резолв assignee: aliases для кириллицы/сокращений | P2 | DONE | backend | Member.aliases + team.yaml; «Роман»→roman теперь матчится |
 | MEL-007 | Telegram бот: подтверждение действий агента | P2 | IN PROGRESS | backend | agents/confirm.py готов, импортируется; не проверен живьём — нужен TELEGRAM_BOT_TOKEN |
