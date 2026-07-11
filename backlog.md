@@ -35,7 +35,7 @@
 | MEL-028 | System audio без VB-Cable через штатный «Стерео микшер» | P1 | DONE | backend | Обнаружено вживую: Stereo Mix ловит системный звук без установки чего-либо. Но требовал переписать audio.py — WDM-KS не поддерживает blocking read (нужен callback) и работает на нативной частоте устройства (48kHz), не 16kHz. Добавлен resample_poly (scipy) до 16kHz перед миксом с mic. Проверено: mic+system вместе, 16kHz WAV, Whisper распознал |
 | MEL-029 | Graceful stop для записи (capture-stop) — не терять запись при ранней остановке | P1 | DONE | backend | Раньше WAV писался только по истечении фиксированного --seconds — ранняя остановка = потеря всего. Добавлен файл-флаг out/.capture_stop: capture без --seconds пишет открыто (до 4ч), capture-stop из другого терминала останавливает и сохраняет накопленное. Проверено вживую: старт → речь → capture-stop → WAV сохранён и распознан |
 | MEL-030 | Кроссплатформенный захват системного звука (не только Stereo Mix) | P1 | DONE | backend | Windows: WASAPI loopback через pyaudiowpatch (meldlane_transcribe/wasapi.py) — записывает default output loopback, работает с любым устройством вывода без Stereo Mix/VB-Cable. Проверено вживую дважды: реальный сигнал захвачен и корректно разделён от mic-дорожки. capture.py: system_track_strategy() — каскад WASAPI → именованный автодетект (Stereo Mix/BlackHole) → mic-only. macOS BlackHole-подсказка в doctor есть, сам BlackHole не тестировался (нет Mac) |
-| MEL-031 | Файловый вход: mp3/m4a/ogg/wav + видео (mp4/mkv/webm...) → транскрипт | P1 | TODO | backend | Путь нулевого сопротивления — без аудиодрайверов вообще: Zoom/Meet пишут звонки сами, человек кидает файл. faster-whisper декодирует аудиоформаты через PyAV без внешнего ffmpeg; видеоконтейнеры — опционально через ffmpeg. Форматы взять из MOM/MeetingScribe |
+| MEL-031 | Файловый вход: mp3/m4a/ogg/wav + видео (mp4/mkv/webm...) → транскрипт | P1 | DONE | backend | `mtranscribe file` проверено на реальном 4-мин m4a из MOM: 89 сегментов, корректный русский, таймлайн |
 
 ## Спринт 1 (Фаза 2) — вынос meldlane-transcribe на GitHub
 
@@ -73,6 +73,17 @@
 - **Значения `speaker`:** канальная диаризация (live-запись) → `me` (mic) / `others` (system audio); pyannote (файлы, extra) → `spk_0`, `spk_1`, ...; неизвестно → `null`.
 - **Из текущего Meldlane переносится с сохранением выстраданных фиксов** (`capture/audio.py`, `capture/transcriber.py`): callback-API вместо blocking read (WDM-KS падает с PaErrorCode -9999), запись на нативной частоте устройства + resample_poly до 16kHz, разрешение device=None через sd.default.device (query_devices(None) возвращает весь список), graceful stop через файл-флаг, faster-whisper (не openai-whisper — не тянуть torch).
 - **Live-запись для канальной диаризации пишет дорожки раздельно** (не миксует, как сейчас в Meldlane) — микс только как опция для совместимости.
+
+## Спринт 2 (Фаза 2) — вынос llm-gateway на GitHub — ЗАКРЫТ
+
+> Цель: библиотека (не сервис) — единая точка вызова LLM для остальных сервисов Meldlane: OpenRouter/OpenAI API (planning-only) + Claude Code/Codex CLI (реальное исполнение, подписка). Единый учёт токенов/$ (api vs subscription).
+
+| ID | Title | Priority | Status | Area | Notes |
+|----|-------|----------|--------|------|-------|
+| MEL-038 | Каркас llm-gateway: pip-пакет + модель TokenUsage (контракт) | P1 | DONE | infra | C:\Projects\llm-gateway, первый коммит. `pip install -e` работает |
+| MEL-039 | chat_completion(): обёртка над OpenRouter/OpenAI Chat Completions | P1 | DONE | ai | Проверено вживую через OpenRouter: billing="api", реальная стоимость $0.000007 |
+| MEL-040 | run_claude_code() / run_codex(): перенос cli_runner.py как есть | P1 | DONE | backend | Все Windows-фиксы сохранены дословно. Проверено вживую: billing="subscription", $0.0109 cost-эквивалент |
+| MEL-041 | Публикация на GitHub + переключение Meldlane на пакет | P1 | DONE | infra | https://github.com/gwogo-r/llm-gateway — публичный, MIT, двуязычный README (ru/en) с честным предупреждением "cwd is not a sandbox" (по следам MEL-042/043), GitHub Pages лендинг (docs/index.html, EN/RU), topics проставлены (13 шт). Meldlane реально устанавливает через git+https URL — проверено. По пути пришлось дважды переделывать рефакторинг из-за инцидента побега агента (см. MEL-042/043 ниже) |
 
 ## Инцидент 2026-07-09: побег агента из песочницы (закрыт)
 
