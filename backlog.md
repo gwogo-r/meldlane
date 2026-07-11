@@ -50,7 +50,7 @@
 | MEL-033 | Спикеры: канальная диаризация mic/system из коробки, pyannote — extra | P1 | DONE | ai | Проверено вживую дважды через полный CLI (`mtranscribe record`): mic.wav и system.wav реально разделены и корректно помечены (me/others) — когда сигнал есть в одной дорожке, другая остаётся чистой. merge_tracks сортирует по таймлайну (unit-тест). Whisper иногда хаотично галлюцинирует на нессмысленном звуке (короткий сигнал/TTS не успел) — известное ограничение модели на неречевом контенте, не баг пайплайна. pyannote extra — не начат, P3 на будущее |
 | MEL-034 | Структурированное хранение сессий + очистка временных файлов | P2 | DONE | backend | outputs/YYYY-MM-DD_HH-MM/transcript.json (+ WAV по флагу --keep-audio, иначе удаляются) |
 | MEL-035 | Команда doctor: диагностика аудиоустройств и стратегии захвата | P2 | DONE | backend | Проверено вживую: нашёл mic по умолчанию и Stereo Mix автодетектом, печатает per-OS подсказки, если loopback нет |
-| MEL-036 | Публикация на GitHub: README (Win/mac), pyproject, лицензия, uvx-запуск | P1 | TODO | infra | Критерий готовности спринта: человек со стороны ставит и получает транскрипт из mp3 без нашей помощи |
+| MEL-036 | Публикация на GitHub: README (Win/mac), pyproject, лицензия, uvx-запуск | P1 | DONE | infra | https://github.com/gwogo-r/meldlane-transcribe — публичный, MIT, README ru/en, GitHub Pages, topics |
 | MEL-037 | Meldlane-оркестратор переходит на meldlane-transcribe как зависимость | P2 | DONE | backend | capture/ удалён, requirements.txt → git+https на GitHub-репо. main.py: capture/capture-stop/transcribe используют meldlane_transcribe.capture/.transcriber, конвертация Segment→TranscriptSegment. Настройки WHISPER_*/*_DEVICE → MTRANSCRIBE_* в .env. Проверено вживую: capture (WASAPI) → transcribe → корректные speaker-метки me/others, дошло до LLM-стадии (упало на отсутствующем API-ключе, не связано с рефакторингом) |
 
 ### Соглашения спринта 1 (для любой сессии/модели, продолжающей работу)
@@ -92,3 +92,22 @@
 |----|-------|----------|--------|------|-------|
 | MEL-042 | agent_workspace_dir внутри репозитория — git находил боевой .git (частично) | P0 | DONE | backend | При тесте `run-task --no-confirm` реальный Claude Code CLI-агент (cwd=out/agent_workspace, копия БЕЗ .git по замыслу) выполнил git-команды, которые git пробросил вверх по родительским папкам до настоящего `C:\Projects\Meldlane\.git`, и агент САМ закоммитил изменения в боевой репозиторий (commit fb25788, локальный, не запушен) — минуя ConfirmGate. Фикс: agent_workspace_dir перенесён в системный temp (вне дерева репозитория, git оттуда не находит .git — проверено). Коммит fb25788 отменён (git reset --hard к 1203f6c). **Это закрыло только один конкретный путь эскейпа (git parent-search), не саму первопричину — см. MEL-043** |
 | MEL-043 | Реальная песочница для CLI-агентов не существует — агент не ограничен cwd вообще | P0 | TODO | backend | Второй инцидент в тот же день: после фикса MEL-042 агент (та же задача, повторный запуск) отредактировал файл в СОВСЕМ ДРУГОМ репозитории (`C:\Projects\llm-gateway`), обнаружив его путь через editable pip-install. Подтверждено: claude-code CLI в режиме `-p` не ограничен рабочей директорией — полноценный агент с доступом к файловой системе в пределах прав ОС-пользователя, "копия в отдельной папке" никогда не была настоящей изоляцией. Правка отменена (git checkout, не закоммичена). **Решение Романа 2026-07-09: полноценную OS-level песочницу (контейнер/отдельный пользователь с урезанными правами/VM) не делаем сейчас — откладываем.** Дисциплина на переходный период: `--no-confirm` для CLI-агентов (claude-code/codex) применять ТОЛЬКО в одноразовых/тестовых директориях, никогда на реальных проектах — обязательно проходить через ConfirmGate (Telegram), который для реальных прогонов не проверен вживую (MEL-007/MEL-015) |
+
+## Спринт 3 (Фаза 2) — вынос meldlane-tasks на GitHub
+
+> Цель: библиотека — интерфейс `TaskSink` с адаптерами (markdown/SQLite/Plane), схема Task как переиспользуемый контракт. Jira/YouTrack — не в этом спринте (нет живого инстанса для проверки, не пишем неподтверждённый код).
+
+| ID | Title | Priority | Status | Area | Notes |
+|----|-------|----------|--------|------|-------|
+| MEL-044 | Каркас meldlane-tasks: pip-пакет + модель Task (контракт) | P1 | DONE | infra | C:\Projects\meldlane-tasks, первый коммит. Схема идентична Meldlane models/task.py |
+| MEL-045 | TaskSink интерфейс + MarkdownSink | P1 | DONE | backend | Абстрактный push/list; MarkdownSink пишет в backlog.md-совместимом формате. 4 unit-теста |
+| MEL-046 | SqliteSink | P2 | DONE | backend | Независимая обёртка над aiosqlite. 3 unit-теста, полный round-trip |
+| MEL-047 | PlaneSink: перенос tracker/plane.py как есть | P1 | DONE | backend | Тот же идемпотентный паттерн. Проверено вживую на реальном Plane: push → issue создан → list() фильтрует по external_source → тестовый артефакт удалён |
+| MEL-048 | Публикация на GitHub + переключение Meldlane на пакет | P1 | IN PROGRESS | infra | https://github.com/gwogo-r/meldlane-tasks — публичный, MIT, README ru/en (переработан вокруг честной ценности — идемпотентный Plane-синк, не markdown/sqlite), GitHub Pages, topics. Публичная установка проверена. **Осталось: переключить сам Meldlane** — tracker/plane.py и main.py:sync-plane заменить на импорт из пакета |
+
+### Соглашения спринта 3
+
+- **Репозиторий:** `C:\Projects\meldlane-tasks`, authorship Roman Fakhrutdinov / gwogo@mail.ru.
+- **Пакет:** `meldlane-tasks`, модуль `meldlane_tasks`. Python 3.11+.
+- **Честная граница:** Jira/YouTrack адаптеры не пишем без живого инстанса для проверки — заглушки с NotImplementedError хуже, чем их отсутствие. TaskSink интерфейс проектируем так, чтобы их можно было добавить потом, не ломая контракт.
+- **PlaneSink переносит без изменений** уже проверенную вживую логику идемпотентности из Meldlane/tracker/plane.py (external_id=sha256(task.id)[:32], POST → 409 → PATCH).
