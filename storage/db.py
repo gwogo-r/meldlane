@@ -33,6 +33,12 @@ CREATE TABLE IF NOT EXISTS token_usage (
     member_id TEXT,
     data TEXT NOT NULL
 );
+
+-- База знаний (MEL-009): FTS5 полнотекстовый индекс по markdown-докам и коду проекта.
+-- Векторный поиск (sqlite-vec) — следующая итерация, нужен рабочий LLM-ключ для эмбеддингов.
+CREATE VIRTUAL TABLE IF NOT EXISTS kb_chunks USING fts5(
+    path UNINDEXED, heading UNINDEXED, content, tokenize='unicode61'
+);
 """
 
 

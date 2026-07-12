@@ -149,6 +149,30 @@ async def _tasks():
         print(f"{t.id}  [{t.status.value:<16}] {t.title}  (-> {who})")
 
 
+async def _kb_index():
+    from kb.index import build_index
+
+    storage = Storage()
+    await storage.init()
+    n = await build_index(storage)
+    print(f"проиндексировано чанков: {n}")
+
+
+async def _kb_search(query: str, limit: int):
+    from kb.index import search
+
+    storage = Storage()
+    await storage.init()
+    results = await search(storage, query, limit=limit)
+    if not results:
+        print("ничего не найдено — если ещё не индексировал, прогони `kb-index`")
+        return
+    for r in results:
+        heading = f" › {r['heading']}" if r["heading"] else ""
+        snippet = " ".join(r["content"].split())[:280]
+        print(f"\n[{r['path']}{heading}]\n  {snippet}...")
+
+
 async def _sync_plane():
     from meldlane_tasks import PlaneSink
 
@@ -322,6 +346,21 @@ def tasks_cmd():
 def sync_plane_cmd():
     """Синхронизировать локальные задачи в Plane (создать/обновить issue)."""
     asyncio.run(_sync_plane())
+
+
+@app.command("kb-index")
+def kb_index_cmd():
+    """Проиндексировать markdown-доки и код проекта (FTS5) для kb-search."""
+    asyncio.run(_kb_index())
+
+
+@app.command("kb-search")
+def kb_search_cmd(
+    query: str = typer.Argument(..., help="поисковый запрос"),
+    limit: int = typer.Option(5, help="сколько чанков показать"),
+):
+    """Полнотекстовый поиск по проиндексированным докам и коду."""
+    asyncio.run(_kb_search(query, limit))
 
 
 @app.command("run-task")
