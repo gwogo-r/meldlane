@@ -8,8 +8,8 @@ numpy
 llm-gateway @ git+https://github.com/gwogo-r/llm-gateway.git
 # аудио / транскрибация — вынесены в отдельный сервис (MEL-037)
 meldlane-transcribe @ git+https://github.com/gwogo-r/meldlane-transcribe.git
-# tracker: Plane API (Шаг 4, DONE — общий self-hosted инстанс с FeedbackOps)
-httpx
+# tracker: Plane sync — вынесен в отдельную библиотеку (MEL-048)
+meldlane-tasks @ git+https://github.com/gwogo-r/meldlane-tasks.git
 # telegram, human-in-the-loop
 aiogram
 # тесты

@@ -143,7 +143,7 @@ async def _tasks():
 
 
 async def _sync_plane():
-    from tracker.plane import PlaneConnector
+    from meldlane_tasks import PlaneSink
 
     storage = Storage()
     await storage.init()
@@ -155,10 +155,24 @@ async def _sync_plane():
         print("нет задач: сначала прогони extract/transcribe")
         return
 
-    connector = PlaneConnector()
+    if not (settings.plane_base_url and settings.plane_api_token
+            and settings.plane_workspace and settings.plane_project_id):
+        print("Plane не сконфигурирован: заполни PLANE_BASE_URL, PLANE_API_TOKEN, "
+              "PLANE_WORKSPACE, PLANE_PROJECT_ID в .env")
+        return
+
+    sink = PlaneSink(
+        base_url=settings.plane_base_url,
+        api_token=settings.plane_api_token,
+        workspace=settings.plane_workspace,
+        project_id=settings.plane_project_id,
+        external_source="meldlane",
+    )
     for t in tasks:
         assignee = by_id.get(t.assignee_id) if t.assignee_id else None
-        plane_id = await connector.push(t, assignee)
+        # meldlane_tasks.PlaneSink дюк-тайпит по атрибутам Task (id/title/description/
+        # source/story_points/evidence_quote совпадают дословно) — конвертация не нужна
+        plane_id = await sink.push(t, assignee_name=assignee.name if assignee else None)
         t.plane_id = plane_id
         await storage.add_task(t)
         who = assignee.name if assignee else (t.assignee_hint or "—")
