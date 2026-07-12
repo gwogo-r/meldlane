@@ -5,3 +5,5 @@ __pycache__/
 *.db
 *.wav
 CLAUDE.md
+frontend/node_modules/
+frontend/dist/

@@ -1,0 +1,40 @@
+main {
+  max-width: 900px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  font-family: system-ui, sans-serif;
+}
+
+nav {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+nav button {
+  padding: 0.4rem 1rem;
+  border: 1px solid #888;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+nav button.active {
+  background: #333;
+  color: #fff;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid #444;
+}
+
+.error {
+  color: #c00;
+}

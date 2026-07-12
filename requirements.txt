@@ -12,5 +12,8 @@ meldlane-transcribe @ git+https://github.com/gwogo-r/meldlane-transcribe.git
 meldlane-tasks @ git+https://github.com/gwogo-r/meldlane-tasks.git
 # telegram, human-in-the-loop
 aiogram
+# web API (MEL-022/MEL-008)
+fastapi
+uvicorn[standard]
 # тесты
 pytest
