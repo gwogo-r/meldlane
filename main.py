@@ -1,6 +1,6 @@
 import asyncio
+import hashlib
 import sys
-import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -62,6 +62,13 @@ async def _members():
         else:
             cap = f"{m.capacity_sp} SP/нед" if m.capacity_sp else "—"
             print(f"- [human] {m.name} [{m.id}] — {m.role or ''} · {cap}")
+
+
+def _stable_meeting_id(source: Path) -> str:
+    """meeting.id от пути источника, не случайный — повторный прогон того же файла
+    переиспользует id, и clear_tasks() в _run_extraction реально чистит старые задачи
+    вместо накопления дублей (MEL-023)."""
+    return hashlib.sha256(str(source.resolve()).encode()).hexdigest()[:12]
 
 
 async def _run_extraction(storage: Storage, meeting: Meeting, transcript: Transcript, members: list[Member]):
@@ -216,7 +223,7 @@ async def _extract(path: Path, title: str):
     members = await _load_members(storage)
 
     text = path.read_text(encoding="utf-8")
-    meeting = Meeting(id=uuid.uuid4().hex[:12], title=title, started_at=datetime.utcnow())
+    meeting = Meeting(id=_stable_meeting_id(path), title=title, started_at=datetime.utcnow())
     transcript = Transcript(meeting_id=meeting.id, segments=[TranscriptSegment(text=text)])
     await _run_extraction(storage, meeting, transcript, members)
 
@@ -265,7 +272,7 @@ async def _transcribe(source: Path, title: str):
     await storage.init()
     members = await _load_members(storage)
 
-    meeting = Meeting(id=uuid.uuid4().hex[:12], title=title, started_at=datetime.utcnow(), source="audio")
+    meeting = Meeting(id=_stable_meeting_id(source), title=title, started_at=datetime.utcnow(), source="audio")
     wavs = (
         [(_SPEAKER_BY_FILENAME.get(p.name), p) for p in sorted(source.glob("*.wav"))]
         if source.is_dir()
