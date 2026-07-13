@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meldlane — capacity is people + agents, on one chart</title>
+<meta name="description" content="A project tracker where AI coding agents are equal assignees, not a bolted-on feature. Tasks come from meetings automatically; agent-assigned ones actually run, real files, real cost, real confirmation before anything irreversible.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧭</text></svg>">
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #11161d;
+    --panel-2: #0e1319;
+    --border: #202b38;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --green: #3fb950;
+    --cyan: #58c7f3;
+    --yellow: #d29922;
+    --red: #f85149;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, "Liberation Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.65 -apple-system, "Segoe UI", system-ui, Roboto, sans-serif;
+  }
+  a { color: var(--cyan); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .container { max-width: 980px; margin: 0 auto; padding: 0 20px; }
+
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(11,15,20,.85); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner { display: flex; align-items: center; gap: 22px; height: 56px; }
+  .logo { font-weight: 700; font-size: 17px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .logo:hover { text-decoration: none; }
+  .nav-links { display: flex; gap: 18px; margin-left: auto; align-items: center; }
+  .nav-links a { color: var(--muted); font-size: 14px; }
+  .nav-links a:hover { color: var(--text); text-decoration: none; }
+  #lang-toggle {
+    background: var(--panel); color: var(--muted);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 10px; font-size: 13px; cursor: pointer; font-family: inherit;
+  }
+  #lang-toggle:hover { color: var(--text); border-color: var(--muted); }
+
+  .hero { padding: 72px 0 40px; text-align: center; position: relative; overflow: hidden; }
+  .hero::before {
+    content: ""; position: absolute; inset: -40% -20% auto; height: 130%;
+    background: radial-gradient(ellipse 55% 45% at 50% 0%, rgba(63,185,80,.14), transparent 70%);
+    pointer-events: none;
+  }
+  .hero h1 {
+    font-size: clamp(36px, 6.5vw, 54px); line-height: 1.15; letter-spacing: -1px;
+    margin-bottom: 18px;
+  }
+  .hero h1 .grad {
+    background: linear-gradient(90deg, var(--green), var(--cyan));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero p.sub { color: var(--muted); font-size: 19px; max-width: 660px; margin: 0 auto 30px; }
+  .badges { display: flex; gap: 10px; justify-content: center; margin-bottom: 30px; flex-wrap: wrap; }
+  .badge {
+    font-family: var(--mono); font-size: 12.5px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px;
+    background: var(--panel);
+  }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 15px;
+    border: 1px solid transparent; cursor: pointer;
+  }
+  .btn:hover { text-decoration: none; }
+  .btn-primary { background: var(--green); color: #04120a; }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-ghost { border-color: var(--border); color: var(--text); background: var(--panel); }
+  .btn-ghost:hover { border-color: var(--muted); }
+  .pip {
+    margin-top: 26px; display: inline-flex; align-items: center; gap: 12px;
+    font-family: var(--mono); font-size: 14px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px;
+  }
+  .copy-btn {
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--muted); font-size: 12px; padding: 3px 9px; cursor: pointer; font-family: inherit;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--muted); }
+
+  .terminal {
+    margin: 46px auto 0; max-width: 780px; text-align: left;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.45);
+    overflow: hidden;
+  }
+  .term-bar {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 10px 14px;
+  }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
+  .term-title { color: var(--muted); font-size: 12.5px; font-family: var(--mono); margin-left: 8px; }
+  .term-body { padding: 16px 18px; overflow-x: auto; }
+  .term-body pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.55; color: var(--text); }
+  .t-dim { color: var(--muted); }
+  .t-green { color: var(--green); }
+  .t-cyan { color: var(--cyan); }
+  .t-yellow { color: var(--yellow); }
+  .t-bold { font-weight: 700; }
+
+  section { padding: 64px 0; border-top: 1px solid var(--border); }
+  h2 { font-size: 30px; letter-spacing: -.5px; margin-bottom: 10px; }
+  .section-sub { color: var(--muted); margin-bottom: 36px; max-width: 640px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 22px; }
+  .card .icon { font-size: 26px; margin-bottom: 12px; }
+  .card h3 { font-size: 16.5px; margin-bottom: 8px; }
+  .card p { color: var(--muted); font-size: 14.5px; }
+
+  .codeblock {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px; margin: 14px 0; position: relative; overflow-x: auto;
+  }
+  .codeblock pre { font-family: var(--mono); font-size: 13.5px; line-height: 1.7; }
+  .codeblock .copy-btn { position: absolute; top: 10px; right: 10px; background: var(--panel); }
+  .codeblock .cmt { color: var(--muted); }
+  .codeblock .kw { color: var(--green); }
+  .codeblock .str { color: var(--cyan); }
+
+  table.stack { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14px; }
+  table.stack th, table.stack td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.stack th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; }
+  table.stack td.name { font-family: var(--mono); color: var(--green); white-space: nowrap; }
+  table.stack td.notes { color: var(--muted); }
+
+  .warn-box {
+    background: rgba(210,153,34,.08); border: 1px solid rgba(210,153,34,.35);
+    border-radius: 12px; padding: 22px 24px; margin-top: 8px;
+  }
+  .warn-box h3 { color: var(--yellow); font-size: 16px; margin-bottom: 10px; }
+  .warn-box p { color: var(--muted); font-size: 14.5px; margin-bottom: 10px; }
+  .warn-box p:last-child { margin-bottom: 0; }
+  .warn-box code { font-family: var(--mono); font-size: 13px; color: var(--text); }
+  .warn-box ul { color: var(--muted); font-size: 14.5px; margin: 0 0 10px 20px; }
+  .warn-box li { margin-bottom: 6px; }
+
+  footer {
+    border-top: 1px solid var(--border); padding: 36px 0 48px;
+    color: var(--muted); font-size: 14px; text-align: center;
+  }
+  footer .links { margin-bottom: 10px; display: flex; gap: 18px; justify-content: center; }
+  @media (max-width: 560px) {
+    .nav-links a:not(#lang-toggle) { display: none; }
+    .hero { padding-top: 48px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="container nav-inner">
+    <a class="logo" href="#">🧭 Meldlane</a>
+    <div class="nav-links">
+      <a href="#features" data-i18n="nav_features">Features</a>
+      <a href="#stack" data-i18n="nav_stack">Toolchain</a>
+      <a href="#install" data-i18n="nav_install">Install</a>
+      <a href="#" class="gh-link">GitHub</a>
+      <button id="lang-toggle" title="Switch language">RU</button>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="container">
+    <h1 data-i18n-html="hero_h1">Capacity is people <span class="grad">+ agents</span>,<br>on one chart</h1>
+    <p class="sub" data-i18n="hero_sub">A project tracker where AI coding agents are equal assignees, not a bolted-on feature. Tasks come out of meetings automatically; agent-assigned ones actually run — real files, real cost, a human confirms before anything irreversible.</p>
+    <div class="badges">
+      <span class="badge">Python 3.12+</span>
+      <span class="badge">React + FastAPI</span>
+      <span class="badge" data-i18n="badge_status">MVP, verified live</span>
+    </div>
+    <div class="cta">
+      <a class="btn btn-primary gh-link" href="#" data-i18n="cta_github">View on GitHub</a>
+      <a class="btn btn-ghost" href="#install" data-i18n="cta_install">Install</a>
+    </div>
+
+    <div class="terminal">
+      <div class="term-bar">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="term-title">meldlane — capacity</span>
+      </div>
+      <div class="term-body">
+<pre><span class="t-dim">$</span> python main.py capacity
+
+<span class="t-bold">участник            роль    задач  SP      токены    $ API       $ подписка~</span>
+Claude Dev          agent   6      0.0     36158     0.0329      0.7152
+Codex Dev           agent   1      0.0     0         0.0000      0.0000
+GPT Researcher      agent   3      0.0     0         0.0000      0.0000
+Roman               human   3      15.0    0         0.0000      0.0000
+
+<span class="t-dim"># $ API — real per-token billing. $ subscription~ — cost-equivalent under</span>
+<span class="t-dim"># a Claude Pro/Max or ChatGPT plan, not a separate charge.</span></pre>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="container">
+    <h2 data-i18n="f_title">Why Meldlane</h2>
+    <p class="section-sub" data-i18n="f_sub">Not Jira/Linear with an AI feature added on — a tracker built around the fact that agents do real work now.</p>
+    <div class="grid">
+      <div class="card">
+        <div class="icon">🤝</div>
+        <h3 data-i18n="f1_h">Agents are equal assignees</h3>
+        <p data-i18n="f1_p">One Member type for Roman and for Claude Dev. One Task type, assigned to either. Not a separate "AI mode" bolted on the side.</p>
+      </div>
+      <div class="card">
+        <div class="icon">📊</div>
+        <h3 data-i18n="f2_h">Capacity that reflects real cost</h3>
+        <p data-i18n="f2_p">Humans show story points. Agents show tokens, split into real API billing vs subscription cost-equivalent — so you never confuse the two.</p>
+      </div>
+      <div class="card">
+        <div class="icon">⚙️</div>
+        <h3 data-i18n="f3_h">Real execution, not planning theater</h3>
+        <p data-i18n="f3_p">Agent-assigned tasks run as actual Claude Code / Codex subprocesses in an isolated workspace copy, and produce real file changes — verified live.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🎙️</div>
+        <h3 data-i18n="f4_h">Tasks come from your meetings</h3>
+        <p data-i18n="f4_p">Mic + system audio (or a file) in, a transcript with speaker labels out, an LLM extracts action items with assignee and story-point guesses.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🔄</div>
+        <h3 data-i18n="f5_h">Synced to Plane, idempotently</h3>
+        <p data-i18n="f5_p">The tracker core isn't reinvented. Tasks push to a real Plane instance and re-sync without creating duplicate issues.</p>
+      </div>
+      <div class="card">
+        <div class="icon">⚖️</div>
+        <h3 data-i18n="f6_h">Honest about the gaps</h3>
+        <p data-i18n="f6_p">Plane doesn't support agents as native assignees, so agent name/cost/story points go into the issue description as text. See "Status" below for what's not solved yet.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="stack">
+  <div class="container">
+    <h2 data-i18n="s_title">Built as a modular toolchain</h2>
+    <p class="section-sub" data-i18n="s_sub">Audio capture/transcription, LLM calls, and Plane sync are each their own published, independently useful package. This repo is the orchestrator that wires them together.</p>
+    <table class="stack">
+      <tr><th data-i18n="s_col_pkg">package</th><th data-i18n="s_col_notes">what it does</th></tr>
+      <tr>
+        <td class="name">meldlane-transcribe</td>
+        <td class="notes" data-i18n="s1_notes">Mic + system audio (WASAPI loopback on Windows, no VB-Cable) or a file in, a structured transcript with speaker labels out.</td>
+      </tr>
+      <tr>
+        <td class="name">llm-gateway</td>
+        <td class="notes" data-i18n="s2_notes">One call for OpenRouter/OpenAI chat completions and for running Claude Code / Codex as real subprocess agents, with a single TokenUsage model tracking which kind of billing applies.</td>
+      </tr>
+      <tr>
+        <td class="name">meldlane-tasks</td>
+        <td class="notes" data-i18n="s3_notes">Idempotent Task → Plane issue sync — push the same task twice, get one issue, not two.</td>
+      </tr>
+    </table>
+  </div>
+</section>
+
+<section id="status">
+  <div class="container">
+    <h2 data-i18n="st_title">Status</h2>
+    <p class="section-sub" data-i18n="st_sub">A working MVP, not a polished product yet.</p>
+    <div class="warn-box">
+      <h3 data-i18n="st_h">⚠ <span data-i18n="st_h2">What's verified vs. what isn't</span></h3>
+      <p data-i18n="st1"><strong>Verified live:</strong> meeting → task extraction, real agent execution (actual files written), idempotent Plane sync, and capacity accounting all run against real data, not mocks.</p>
+      <p data-i18n="st2"><strong>Not yet:</strong> the web UI hasn't been checked in an actual browser (API + build verified only); the Telegram confirm-gate is written but untested live — real agent execution currently skips confirmation, in disposable working copies only.</p>
+      <p data-i18n="st3"><strong>Known limitation:</strong> a CLI agent's working directory is a convention, not a filesystem jail — there's no real sandbox yet. Handled procedurally for now, not solved technically.</p>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="container">
+    <h2 data-i18n="i_title">Install</h2>
+    <p class="section-sub" data-i18n="i_sub">Python 3.12+. Clone, install, point it at your LLM/Plane keys.</p>
+    <div class="codeblock">
+      <button class="copy-btn" data-copy="pip install -r requirements.txt
+cp .env.example .env" data-i18n="copy">copy</button>
+<pre><span class="cmt"># backend</span>
+<span class="kw">pip</span> install -r requirements.txt
+cp .env.example .env</pre>
+    </div>
+    <div class="codeblock">
+      <button class="copy-btn" data-copy="python main.py members
+python main.py extract samples/standup.txt
+python main.py capacity" data-i18n="copy">copy</button>
+<pre><span class="cmt"># see your team, extract tasks from a sample meeting, check capacity</span>
+python main.py members
+python main.py extract samples/standup.txt
+python main.py capacity</pre>
+    </div>
+    <div class="codeblock">
+      <button class="copy-btn" data-copy="python -m uvicorn api.app:app --reload
+cd frontend && npm install && npm run dev" data-i18n="copy">copy</button>
+<pre><span class="cmt"># web UI</span>
+python -m uvicorn api.app:app --reload      <span class="cmt"># port 8000</span>
+cd frontend && npm install && npm run dev   <span class="cmt"># port 5173</span></pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="links">
+      <a href="#" class="gh-link">GitHub</a>
+      <a href="#" class="gh-issues" data-i18n="ft_issues">Report an issue</a>
+      <a href="#" class="gh-license" data-i18n="ft_license">All rights reserved</a>
+    </div>
+    <div data-i18n="ft_note">Source is public for demonstration. No telemetry beyond what you configure yourself.</div>
+  </div>
+</footer>
+
+<script>
+const REPO_URL = "https://github.com/gwogo-r/meldlane";
+
+document.querySelectorAll(".gh-link").forEach(a => a.href = REPO_URL);
+document.querySelectorAll(".gh-issues").forEach(a => a.href = REPO_URL + "/issues");
+document.querySelectorAll(".gh-license").forEach(a => a.href = REPO_URL + "/blob/main/LICENSE");
+document.querySelectorAll("[data-copy]").forEach(b => {
+  b.addEventListener("click", () => {
+    navigator.clipboard.writeText(b.dataset.copy).then(() => {
+      const old = b.textContent;
+      b.textContent = "✓";
+      setTimeout(() => b.textContent = old, 1200);
+    });
+  });
+});
+
+const I18N = {
+  en: {
+    nav_features: "Features", nav_stack: "Toolchain", nav_install: "Install", copy: "copy",
+    hero_h1: 'Capacity is people <span class="grad">+ agents</span>,<br>on one chart',
+    hero_sub: "A project tracker where AI coding agents are equal assignees, not a bolted-on feature. Tasks come out of meetings automatically; agent-assigned ones actually run — real files, real cost, a human confirms before anything irreversible.",
+    badge_status: "MVP, verified live",
+    cta_github: "View on GitHub", cta_install: "Install",
+    f_title: "Why Meldlane",
+    f_sub: "Not Jira/Linear with an AI feature added on — a tracker built around the fact that agents do real work now.",
+    f1_h: "Agents are equal assignees",
+    f1_p: 'One Member type for Roman and for Claude Dev. One Task type, assigned to either. Not a separate "AI mode" bolted on the side.',
+    f2_h: "Capacity that reflects real cost",
+    f2_p: "Humans show story points. Agents show tokens, split into real API billing vs subscription cost-equivalent — so you never confuse the two.",
+    f3_h: "Real execution, not planning theater",
+    f3_p: "Agent-assigned tasks run as actual Claude Code / Codex subprocesses in an isolated workspace copy, and produce real file changes — verified live.",
+    f4_h: "Tasks come from your meetings",
+    f4_p: "Mic + system audio (or a file) in, a transcript with speaker labels out, an LLM extracts action items with assignee and story-point guesses.",
+    f5_h: "Synced to Plane, idempotently",
+    f5_p: "The tracker core isn't reinvented. Tasks push to a real Plane instance and re-sync without creating duplicate issues.",
+    f6_h: "Honest about the gaps",
+    f6_p: 'Plane doesn\'t support agents as native assignees, so agent name/cost/story points go into the issue description as text. See "Status" below for what\'s not solved yet.',
+    s_title: "Built as a modular toolchain",
+    s_sub: "Audio capture/transcription, LLM calls, and Plane sync are each their own published, independently useful package. This repo is the orchestrator that wires them together.",
+    s_col_pkg: "package", s_col_notes: "what it does",
+    s1_notes: "Mic + system audio (WASAPI loopback on Windows, no VB-Cable) or a file in, a structured transcript with speaker labels out.",
+    s2_notes: "One call for OpenRouter/OpenAI chat completions and for running Claude Code / Codex as real subprocess agents, with a single TokenUsage model tracking which kind of billing applies.",
+    s3_notes: "Idempotent Task → Plane issue sync — push the same task twice, get one issue, not two.",
+    st_title: "Status", st_sub: "A working MVP, not a polished product yet.",
+    st_h2: "What's verified vs. what isn't",
+    st1: "<strong>Verified live:</strong> meeting → task extraction, real agent execution (actual files written), idempotent Plane sync, and capacity accounting all run against real data, not mocks.",
+    st2: "<strong>Not yet:</strong> the web UI hasn't been checked in an actual browser (API + build verified only); the Telegram confirm-gate is written but untested live — real agent execution currently skips confirmation, in disposable working copies only.",
+    st3: "<strong>Known limitation:</strong> a CLI agent's working directory is a convention, not a filesystem jail — there's no real sandbox yet. Handled procedurally for now, not solved technically.",
+    i_title: "Install", i_sub: "Python 3.12+. Clone, install, point it at your LLM/Plane keys.",
+    ft_issues: "Report an issue", ft_license: "All rights reserved",
+    ft_note: "Source is public for demonstration. No telemetry beyond what you configure yourself."
+  },
+  ru: {
+    nav_features: "Возможности", nav_stack: "Тулчейн", nav_install: "Установка", copy: "копир.",
+    hero_h1: 'Ёмкость — это люди <span class="grad">+ агенты</span>,<br>на одном графике',
+    hero_sub: "Трекер задач, где AI-агенты — полноправные assignee, а не прикрученная фича. Задачи возникают из митингов автоматически; задачи на агента реально выполняются — настоящие файлы, настоящая стоимость, подтверждение человеком перед необратимым действием.",
+    badge_status: "MVP, проверено вживую",
+    cta_github: "Открыть на GitHub", cta_install: "Установить",
+    f_title: "Зачем Meldlane",
+    f_sub: "Не Jira/Linear с прикрученной AI-фичей — трекер, построенный вокруг того, что агенты уже делают настоящую работу.",
+    f1_h: "Агенты — полноправные assignee",
+    f1_p: "Один и тот же тип Member для Романа и для Claude Dev. Одна и та же Task назначается на любого. Не отдельный «AI-режим» сбоку.",
+    f2_h: "Ёмкость, которая честно отражает стоимость",
+    f2_p: "У людей — story points. У агентов — токены, разделённые на реальную оплату за API и cost-эквивалент под подпиской — чтобы не путать одно с другим.",
+    f3_h: "Реальное исполнение, а не имитация планирования",
+    f3_p: "Задачи на агента выполняются как настоящие подпроцессы Claude Code / Codex в изолированной копии рабочей директории и производят реальные изменения файлов — проверено вживую.",
+    f4_h: "Задачи берутся из митингов",
+    f4_p: "Mic + системный звук (или файл) на входе, транскрипт с метками спикеров на выходе, LLM извлекает action items с догадками об исполнителе и story points.",
+    f5_h: "Синк с Plane, идемпотентно",
+    f5_p: "Ядро трекера не переписывается заново. Задачи пушатся в реальный инстанс Plane и пересинкаются без дублирования issues.",
+    f6_h: "Честность про пробелы",
+    f6_p: "Plane не поддерживает агентов как нативных assignee, поэтому имя агента/стоимость/story points идут в описание issue текстом. Что ещё не решено — см. «Статус» ниже.",
+    s_title: "Собрано как модульный тулчейн",
+    s_sub: "Захват/транскрибация звука, LLM-вызовы и синк с Plane — каждый вынесен в отдельный опубликованный, самостоятельно полезный пакет. Этот репозиторий — оркестратор, который их связывает.",
+    s_col_pkg: "пакет", s_col_notes: "что делает",
+    s1_notes: "Mic + системный звук (WASAPI loopback на Windows, без VB-Cable) или файл на входе, структурированный транскрипт с метками спикеров на выходе.",
+    s2_notes: "Один вызов и для OpenRouter/OpenAI chat completions, и для запуска Claude Code / Codex как реальных подпроцессов-агентов, с единой моделью TokenUsage, которая отслеживает тип оплаты.",
+    s3_notes: "Идемпотентный синк Task → issue в Plane — запушь одну и ту же задачу дважды, получи один issue, не два.",
+    st_title: "Статус", st_sub: "Рабочий MVP, не отполированный продукт.",
+    st_h2: "Что проверено вживую, а что нет",
+    st1: "<strong>Проверено вживую:</strong> извлечение задач из митинга, реальное исполнение агентом (настоящая запись файлов), идемпотентный синк с Plane и учёт ёмкости — всё работает на реальных данных, не на моках.",
+    st2: "<strong>Пока нет:</strong> web UI не проверен в реальном браузере (только API и сборка); Telegram-подтверждение написано, но не проверено вживую — реальное исполнение агентом сейчас идёт с пропуском подтверждения, только в одноразовых рабочих копиях.",
+    st3: "<strong>Известное ограничение:</strong> рабочая директория CLI-агента — это соглашение, не файловый джейл, настоящей песочницы пока нет. Решается процедурно, не технически.",
+    i_title: "Установка", i_sub: "Python 3.12+. Склонируй, установи, укажи свои LLM/Plane ключи.",
+    ft_issues: "Сообщить о проблеме", ft_license: "Все права защищены",
+    ft_note: "Код публичен для демонстрации. Без телеметрии, кроме того, что настроишь сам."
+  }
+};
+
+const toggle = document.getElementById("lang-toggle");
+function setLang(lang) {
+  const dict = I18N[lang];
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    const k = el.dataset.i18n;
+    if (dict[k]) el.textContent = dict[k];
+  });
+  document.querySelectorAll("[data-i18n-html]").forEach(el => {
+    const k = el.dataset.i18nHtml;
+    if (dict[k]) el.innerHTML = dict[k];
+  });
+  toggle.textContent = lang === "en" ? "RU" : "EN";
+  localStorage.setItem("ml-lang", lang);
+}
+toggle.addEventListener("click", () =>
+  setLang(document.documentElement.lang === "en" ? "ru" : "en"));
+setLang(localStorage.getItem("ml-lang") ||
+  ((navigator.language || "").toLowerCase().startsWith("ru") ? "ru" : "en"));
+</script>
+</body>
+</html>
