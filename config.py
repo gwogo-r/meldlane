@@ -1,9 +1,17 @@
 import tempfile
 from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).parent
+
+# pydantic-settings(env_file=".env") ниже читает .env только в свой Settings —
+# не в os.environ. meldlane_transcribe (MTRANSCRIBE_*) читает переменные напрямую
+# через os.getenv(), поэтому без этого MTRANSCRIBE_LANGUAGE/*_DEVICE молча
+# игнорировались (обнаружено вживую 2026-07-22: MTRANSCRIBE_LANGUAGE=ru стоял
+# в .env, но Whisper всё равно работал в автоопределении языка).
+load_dotenv(BASE_DIR / ".env")
 
 
 class Settings(BaseSettings):

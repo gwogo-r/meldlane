@@ -304,11 +304,17 @@ async def _transcribe(source: Path, title: str):
     )
 
     print(f"транскрибирую {source} (модель: {mt_config.whisper_model()})...")
-    tracks_segments, lang = [], ""
+    tracks_segments, langs_by_segment_count = [], {}
     for speaker, wav in wavs:
         segments, track_lang, _ = transcribe_file(wav, speaker=speaker)
         tracks_segments.append(segments)
-        lang = lang or track_lang
+        if track_lang:
+            langs_by_segment_count[track_lang] = langs_by_segment_count.get(track_lang, 0) + len(segments)
+    # смешанные по языку встречи — не редкость (мик на одном языке, системный звук
+    # на другом); берём язык дорожки с наибольшим числом сегментов, а не первой
+    # попавшейся (раньше bug: mic.wav всегда обрабатывался первым по сортировке
+    # имён и его язык побеждал независимо от того, где было больше речи)
+    lang = max(langs_by_segment_count, key=langs_by_segment_count.get, default="")
 
     merged = mt_merge_tracks(*tracks_segments)
     transcript = Transcript(
